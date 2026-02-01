@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  id               String             @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  email            String             @unique @db.VarChar
+  name             String             @default("")
+  email_verified   Boolean            @default(false)
+  status           user_status_enum   @default(ACTIVE)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @updatedAt @db.Timestamptz(6)
+  ai_conversations ai_conversations[]
+  bookings         bookings[]
+  friend_requests  friend_requests[]
+  friends_to       friends[]          @relation("friends_to")
+  friends_from     friends[]          @relation("friends_from")
+  payments         payments[]
+  trip_shares      trip_shares[]
+  trips            trips[]
+  user_profiles    user_profiles?
+  user_sessions    user_sessions[]
+}
+
+model user_profiles {
+  id          String   @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  user_id     String   @unique @db.Uuid
+  full_name   String?
+  avatar_url  String?
+  preferences Json?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+  users       users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model user_sessions {
+  id         String      @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  user_id    String      @db.Uuid
+  token      String
+  type       SessionType
+  expires_at DateTime
+  revoked    Boolean     @default(false)
+  ip_address String?
+  user_agent String?
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+  used_at    DateTime?
+  users      users       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, type])
+  @@index([token])
+  @@index([expires_at])
+}
+
+model trips {
+  id                  String                @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  user_id             String                @db.Uuid
+  title               String?
+  start_date          DateTime?             @db.Date
+  end_date            DateTime?             @db.Date
+  status              trip_status_enum      @default(PLANNING)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @updatedAt @db.Timestamptz(6)
+  ai_conversations    ai_conversations[]
+  ai_trip_actions     ai_trip_actions[]
+  bookings            bookings[]
+  trip_shares         trip_shares[]
+  trip_timeline_items trip_timeline_items[]
+  users               users                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model trip_timeline_items {
+  id                 String                  @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  trip_id            String                  @db.Uuid
+  type               timeline_item_type_enum
+  source             timeline_source_enum
+  title              String?
+  description        String?
+  start_time         DateTime?
+  end_time           DateTime?
+  experience_item_id String?                 @db.Uuid
+  created_at         DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                @updatedAt @db.Timestamptz(6)
+  ai_trip_actions    ai_trip_actions[]
+  experience_items   experience_items?       @relation(fields: [experience_item_id], references: [id])
+  trips              trips                   @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+
+  @@index([trip_id])
+}
+
+model experience_items {
+  id                  String                @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  type                experience_type_enum
+  name                String?
+  location_text       String?
+  metadata            Json?
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @updatedAt @db.Timestamptz(6)
+  booking_items       booking_items[]
+  trip_timeline_items trip_timeline_items[]
+}
+
+model bookings {
+  id                 String              @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  trip_id            String              @db.Uuid
+  created_by_user_id String              @db.Uuid
+  status             booking_status_enum @default(PENDING)
+  total_amount       Decimal?
+  currency           String?
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime            @updatedAt @db.Timestamptz(6)
+  booking_items      booking_items[]
+  users              users               @relation(fields: [created_by_user_id], references: [id])
+  trips              trips               @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+  payments           payments[]
+
+  @@index([trip_id])
+  @@index([created_by_user_id])
+  @@index([status])
+}
+
+model booking_items {
+  id                 String                 @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  booking_id         String                 @db.Uuid
+  type               booking_item_type_enum
+  quantity           Int?
+  unit_price         Decimal?
+  experience_item_id String?                @db.Uuid
+  created_at         DateTime               @default(now()) @db.Timestamptz(6)
+  bookings           bookings               @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  experience_items   experience_items?      @relation(fields: [experience_item_id], references: [id])
+
+  @@index([booking_id])
+}
+
+model payments {
+  id              String              @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  booking_id      String              @db.Uuid
+  paid_by_user_id String              @db.Uuid
+  amount          Decimal?
+  status          payment_status_enum
+  provider        String?
+  created_at      DateTime            @default(now()) @db.Timestamptz(6)
+  bookings        bookings            @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  users           users               @relation(fields: [paid_by_user_id], references: [id])
+
+  @@index([booking_id])
+  @@index([paid_by_user_id])
+}
+
+model ai_conversations {
+  id         String   @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  user_id    String   @db.Uuid
+  trip_id    String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  trips      trips?   @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, trip_id])
+  @@index([user_id])
+  @@index([trip_id])
+}
+
+model ai_trip_actions {
+  id                  String                @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  trip_id             String                @db.Uuid
+  timeline_item_id    String?               @db.Uuid
+  action_type         ai_action_type_enum
+  payload             Json?
+  status              ai_action_status_enum @default(PENDING)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  trip_timeline_items trip_timeline_items?  @relation(fields: [timeline_item_id], references: [id])
+  trips               trips                 @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+
+  @@index([trip_id])
+  @@index([status])
+}
+
+model friend_requests {
+  id            String                     @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  from_user_id  String                     @db.Uuid
+  to_user_email String
+  status        friend_request_status_enum @default(PENDING)
+  created_at    DateTime                   @default(now()) @db.Timestamptz(6)
+  users         users                      @relation(fields: [from_user_id], references: [id], onDelete: Cascade)
+
+  @@index([from_user_id])
+  @@index([to_user_email])
+}
+
+model friends {
+  id             String   @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  user_id        String   @db.Uuid
+  friend_user_id String   @db.Uuid
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  users_to       users    @relation("friends_to", fields: [friend_user_id], references: [id], onDelete: Cascade)
+  users_from     users    @relation("friends_from", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, friend_user_id])
+  @@index([friend_user_id])
+}
+
+model trip_shares {
+  id                  String                     @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  trip_id             String                     @db.Uuid
+  shared_with_user_id String                     @db.Uuid
+  permission          trip_share_permission_enum
+  created_at          DateTime                   @default(now()) @db.Timestamptz(6)
+  users               users                      @relation(fields: [shared_with_user_id], references: [id], onDelete: Cascade)
+  trips               trips                      @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+
+  @@unique([trip_id, shared_with_user_id])
+  @@index([shared_with_user_id])
+}
+
+model admins {
+  id         String   @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  email      String   @unique @db.VarChar
+  name       String?
+  password   String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([email])
+}
+
+enum SessionType {
+  OTP
+  REFRESH
+}
+
+enum user_status_enum {
+  ACTIVE
+  BLOCKED
+}
+
+enum trip_status_enum {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum timeline_item_type_enum {
+  ACTIVITY
+  NOTE
+  REMINDER
+  FLIGHT
+  HOTEL
+}
+
+enum timeline_source_enum {
+  MANUAL
+  IMPORT
+  AI
+  BOOKING
+}
+
+enum experience_type_enum {
+  FLIGHT
+  HOTEL
+  TOUR
+  PLACE
+}
+
+enum booking_status_enum {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum booking_item_type_enum {
+  FLIGHT
+  HOTEL
+  TOUR
+  SERVICE
+}
+
+enum payment_status_enum {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ai_action_type_enum {
+  ADD
+  MODIFY
+  REMOVE
+  REMIND
+  SUGGEST
+}
+
+enum ai_action_status_enum {
+  PENDING
+  APPLIED
+  FAILED
+}
+
+enum friend_request_status_enum {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum trip_share_permission_enum {
+  VIEW
+  EDIT
+}
