@@ -4,84 +4,95 @@ import { useRef, useState } from 'react'
 import { Mic, Minimize2, Send } from 'lucide-react'
 import { FaAnglesLeft, FaKeyboard } from 'react-icons/fa6'
 
-type VoiceResponse = {
-  transcript: string
+type AIResponse = {
+  transcript?: string
   intent: string
-  action_preview?: any
+  action_preview?: {
+    action_type: string
+    payload: any
+  }
   message: string
 }
 
-export default function Right() {
+type Props = Readonly<{ tripId: string }>
+
+export default function Right({ tripId }: Readonly<Props>) {
   const [open, setOpen] = useState(false)
   const [inputMode, setInputMode] = useState<'voice' | 'text'>('voice')
   const [recording, setRecording] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [textValue, setTextValue] = useState('')
   const [resultText, setResultText] = useState<string | null>(null)
-
+  const [actionPreview, setActionPreview] = useState<any>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const API = process.env.NEXT_PUBLIC_API_BASE!
 
-  const getMimeType = () => {
-    if (globalThis.window === undefined) return undefined
+  const handleAIResponse = (data: AIResponse) => {
+    setResultText(data.message ?? data.transcript ?? '')
+    setActionPreview(data.action_preview ?? null)
+  }
 
-    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-      return 'audio/webm;codecs=opus'
+  const handleChat = async () => {
+    if (!textValue.trim()) return
+    setLoading(true)
+
+    try {
+      const res = await fetch(`${API}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: textValue }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error("AI chat failed")
+
+      handleAIResponse(data)
+    } catch {
+      setResultText('AI xử lý thất bại')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    if (MediaRecorder.isTypeSupported('audio/mp4')) {
-      return 'audio/mp4'
+  const handleVoiceStop = async () => {
+    setLoading(true)
+    try {
+      const audioBlob = new Blob(chunksRef.current)
+      const form = new FormData()
+      form.append('file', audioBlob, 'voice')
+
+      const res = await fetch(`${API}/ai/voice`, {
+        method: 'POST',
+        body: form,
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error("AI voice failed")
+
+      handleAIResponse(data)
+    } catch {
+      setResultText('Voice xử lý thất bại')
+    } finally {
+      setLoading(false)
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
     }
-
-    return undefined
   }
 
   const startRecording = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     streamRef.current = stream
 
-    const recorder = new MediaRecorder(stream, {
-      mimeType: getMimeType(),
-    })
-
+    const recorder = new MediaRecorder(stream)
     chunksRef.current = []
 
     recorder.ondataavailable = e => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data)
-      }
+      if (e.data.size > 0) chunksRef.current.push(e.data)
     }
 
-    recorder.onstop = async () => {
-      setLoading(true)
-      try {
-        const audioBlob = new Blob(chunksRef.current)
-        const form = new FormData()
-        form.append('file', audioBlob, 'voice')
-
-        const res = await fetch(
-            process.env.NEXT_PUBLIC_API_BASE + '/ai/voice',
-            {
-              method: 'POST',
-              body: form,
-            }
-        )
-
-        const data = (await res.json()) as VoiceResponse
-
-        if (!res.ok) {
-          throw new Error('voice_failed')
-        }
-
-        setResultText(data.transcript)
-      } catch {
-        setResultText('Không có dữ liệu phù hợp trong hệ thống')
-      } finally {
-        setLoading(false)
-        streamRef.current?.getTracks().forEach(t => t.stop())
-        streamRef.current = null
-      }
-    }
+    recorder.onstop = handleVoiceStop
 
     recorder.start()
     mediaRecorderRef.current = recorder
@@ -89,67 +100,107 @@ export default function Right() {
   }
 
   const stopRecording = () => {
-    const recorder = mediaRecorderRef.current
-    if (!recorder) return
-    recorder.stop()
+    mediaRecorderRef.current?.stop()
     setRecording(false)
   }
 
-  const handleVoiceClick = () => {
-    if (inputMode !== 'voice') {
-      setInputMode('voice')
-      return
+  const confirmAction = async () => {
+    if (!actionPreview) return
+
+    setLoading(true)
+
+    try {
+      const createRes = await fetch(`${API}/ata/${tripId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actionPreview),
+      })
+
+      const action = await createRes.json()
+      if (!createRes.ok) throw new Error("AI confirm failed")
+
+      await fetch(`${API}/ata/${action.id}/confirm`, {
+        method: 'PATCH',
+      })
+
+      setResultText('Đã thêm vào lịch trình')
+      setActionPreview(null)
+    } catch {
+      setResultText('Confirm thất bại')
+    } finally {
+      setLoading(false)
     }
-    recording ? stopRecording() : startRecording()
   }
 
   return (
       <>
         {open && (
-            <div
-                className="pointer-events-none fixed inset-0 z-30 bg-black/25"
-                aria-hidden
-            />
+            <div className="pointer-events-none fixed inset-0 z-30 bg-black/25" />
         )}
 
         <aside
-            className={`
-          fixed z-40 right-6 top-6 bottom-12 w-135
-          transition-all duration-500 ease-[cubic-bezier(.22,1,.36,1)]
-          ${open ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}
-        `}
+            className={`fixed z-40 right-6 top-6 bottom-12 w-135 transition-all duration-500 ${
+                open
+                    ? 'translate-x-0 opacity-100'
+                    : 'translate-x-full opacity-0 pointer-events-none'
+            }`}
         >
-          <div className="relative flex h-full w-full flex-col rounded-[35px] bg-black">
-            <div className="absolute left-4 top-4 z-10">
+          <div className="relative flex h-full flex-col rounded-[35px] bg-black text-white">
+
+            <div className="absolute left-4 top-4">
               <button
                   onClick={() => setOpen(false)}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-950/60 text-orange-400 hover:bg-orange-950/80"
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-950/60 text-orange-400"
               >
-                <Minimize2 className="h-6 w-6" />
+                <Minimize2 />
               </button>
             </div>
 
-            <div className="flex-1 px-4 pt-20 text-white/80">
-              {loading && <p>AI đang xử lý dữ liệu…</p>}
+            <div className="flex-1 px-4 pt-20 space-y-4">
+              {loading && <p>AI đang xử lý...</p>}
               {resultText && <p>{resultText}</p>}
+
+              {actionPreview && (
+                  <div className="rounded-xl bg-white/10 p-4 text-sm">
+                    <p>AI đề xuất:</p>
+                    <pre className="text-xs mt-2">
+                  {JSON.stringify(actionPreview, null, 2)}
+                </pre>
+                    <button
+                        onClick={confirmAction}
+                        disabled={actionPreview?.action_type === 'SUGGEST'}
+                        className="mt-3 rounded-lg bg-orange-600 px-4 py-2 disabled:opacity-40"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+              )}
             </div>
 
             <div className="px-4 pb-4">
               <div className="flex items-center gap-3 rounded-3xl bg-white/5 p-2">
+
                 <button
-                    onClick={handleVoiceClick}
-                    className={`
-                  flex items-center gap-3 overflow-hidden rounded-full transition-all
-                  ${inputMode === 'voice' ? 'flex-1 bg-white/10 px-4 py-3' : 'h-12 w-12 justify-center bg-orange-950/60'}
-                `}
+                    onClick={() => {
+                      if (inputMode === 'voice') {
+                        if (recording) {
+                          stopRecording()
+                        } else {
+                          startRecording()
+                        }
+                      } else {
+                        setInputMode('voice')
+                      }
+                    }}
+                    className={`flex items-center gap-3 rounded-full transition-all ${
+                        inputMode === 'voice'
+                            ? 'flex-1 bg-white/10 px-4 py-3'
+                            : 'h-12 w-12 justify-center bg-orange-950/60'
+                    }`}
                 >
-                  <Mic
-                      className={`h-6 w-6 ${
-                          recording ? 'text-red-400' : 'text-white'
-                      }`}
-                  />
+                  <Mic className={recording ? 'text-red-400' : 'text-white'} />
                   {inputMode === 'voice' && (
-                      <span className="text-white/80">
+                      <span>
                     {recording ? 'Đang nghe…' : 'Nói với TripVN'}
                   </span>
                   )}
@@ -157,23 +208,30 @@ export default function Right() {
 
                 <button
                     onClick={() => setInputMode('text')}
-                    className={`
-                  flex items-center gap-3 overflow-hidden rounded-full transition-all
-                  ${inputMode === 'text' ? 'flex-1 bg-white/10 px-4 py-3' : 'h-12 w-12 justify-center bg-orange-950/60'}
-                `}
+                    className={`flex items-center gap-3 rounded-full transition-all ${
+                        inputMode === 'text'
+                            ? 'flex-1 bg-white/10 px-4 py-3'
+                            : 'h-12 w-12 justify-center bg-orange-950/60'
+                    }`}
                 >
                   {inputMode === 'text' ? (
                       <>
                         <input
+                            value={textValue}
+                            onChange={e => setTextValue(e.target.value)}
                             placeholder="Nhập yêu cầu của bạn..."
-                            className="flex-1 bg-transparent text-white outline-none placeholder:text-white/40"
+                            className="flex-1 bg-transparent outline-none placeholder:text-white/40"
                         />
-                        <Send className="h-6 w-6 text-white" />
+                        <Send
+                            onClick={handleChat}
+                            className="cursor-pointer"
+                        />
                       </>
                   ) : (
-                      <FaKeyboard className="h-6 w-6 text-orange-400" />
+                      <FaKeyboard />
                   )}
                 </button>
+
               </div>
             </div>
           </div>
@@ -182,7 +240,7 @@ export default function Right() {
         {!open && (
             <button
                 onClick={() => setOpen(true)}
-                className="fixed right-4 top-1/2 z-50 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50"
+                className="fixed right-4 top-1/2 z-50 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white"
             >
               <FaAnglesLeft size={18} />
             </button>

@@ -54,7 +54,7 @@ export class BookingsController {
         );
     }
 
-    @Get('/trip/:tripId')
+    @Get('trip/:tripId')
     getByTrip(
         @Req() req: Request & { user: AuthUser },
         @Param('tripId') tripId: string,

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Post,
   UploadedFile,
@@ -15,6 +16,17 @@ import { VoiceResponseDto } from './dto/voice-response.dto'
 @Controller('ai')
 export class AiController {
   constructor(private readonly ai: AiService) {}
+
+  @Post('chat')
+  async chat(
+      @Body() body: { message: string },
+  ): Promise<VoiceResponseDto> {
+    if (!body.message) {
+      throw new BadRequestException('message is required')
+    }
+
+    return this.ai.chat(body.message)
+  }
 
   @Post('voice')
   @UseInterceptors(

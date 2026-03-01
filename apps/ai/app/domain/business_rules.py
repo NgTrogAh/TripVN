@@ -1,20 +1,23 @@
 from apps.ai.app.domain.intent import Intent
-from apps.ai.app.domain.trip_action import TripAction, ActionType
+from apps.ai.app.domain.trip_action import TripAction
 
 class BusinessRules:
     @staticmethod
-    def validate(intent: Intent, action: TripAction) -> None:
-        if intent in (Intent.GENERAL_CHAT, Intent.UNKNOWN):
-            return
+    def validate(intent: Intent, action: TripAction):
+        payload = action.payload or {}
 
-        if intent == Intent.SET_REMINDER and action.type != ActionType.REMIND:
-            raise ValueError("SET_REMINDER only allows REMIND action")
+        if intent == Intent.ADD_TIMELINE_ITEM:
+            if not payload.get("timeline_type"):
+                raise ValueError("timeline_type is required")
 
-        if intent == Intent.ADD_TIMELINE_ITEM and action.type != ActionType.ADD:
-            raise ValueError("ADD_TIMELINE_ITEM only allows ADD action")
+        elif intent == Intent.SET_REMINDER:
+            if not payload.get("title") or not payload.get("remind_at"):
+                raise ValueError("title and remind_at are required")
 
-        if (
-                intent == Intent.QUERY_TRIP_INFO
-                and action.type not in (ActionType.SUGGEST, ActionType.ADD)
-        ):
-            raise ValueError("QUERY_TRIP_INFO allows only SUGGEST or ADD")
+        elif intent == Intent.MODIFY_TIMELINE_ITEM:
+            if not payload.get("timeline_item_id"):
+                raise ValueError("timeline_item_id is required")
+
+        elif intent == Intent.REMOVE_TIMELINE_ITEM:
+            if not payload.get("timeline_item_id"):
+                raise ValueError("timeline_item_id is required")

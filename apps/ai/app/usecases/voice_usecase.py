@@ -1,3 +1,4 @@
+import asyncio
 from apps.ai.app.infrastructure.fasterWhisper import FasterWhisperService
 from apps.ai.app.usecases.chat_usecase import ChatUsecase
 from apps.ai.app.schemas.voice_schema import VoiceResponseSchema
@@ -10,8 +11,15 @@ class VoiceUsecase:
     async def handle(self, file) -> VoiceResponseSchema:
         audio_bytes = await file.read()
 
-        transcript_result = self.stt.transcribe(audio_bytes)
-        transcript = transcript_result["text"]
+        transcript_result = await asyncio.to_thread(
+            self.stt.transcribe,
+            audio_bytes,
+        )
+
+        transcript = transcript_result.get("text")
+
+        if not transcript:
+            raise ValueError("Empty transcript")
 
         chat_result = await self.chat.handle(transcript)
 
