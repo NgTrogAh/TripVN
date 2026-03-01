@@ -5,7 +5,7 @@ dist/
 apps/**/dist/
 
 # env
-.env
+apps/be/.env
 .env.*
 *.env
 

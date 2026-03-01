@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
-import { ConfigModule } from '@nestjs/config'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { JwtModule } from '@nestjs/jwt'
+import type { StringValue } from 'ms'
 
 import { PrismaModule } from './prisma/prisma.module'
 import { UsersModule } from './users/users.module'
@@ -10,6 +12,7 @@ import { TripsModule } from './trips/trips.module'
 import { BookingsModule } from './bookings/bookings.module'
 import { AdminModule } from './admin/admin.module'
 import { AiModule } from './ai/ai.module'
+import { AtaModule } from './ata/ata.module'
 import { AppController } from './app.controller'
 
 @Module({
@@ -19,12 +22,25 @@ import { AppController } from './app.controller'
       envFilePath: '.env',
     }),
 
+    JwtModule.registerAsync({
+      global: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET')
+        if (!secret) throw new Error('JWT_SECRET is not defined')
+
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (config.get('JWT_EXPIRES_IN') ?? '15m') as StringValue,
+          },
+        }
+      },
+    }),
+
     ThrottlerModule.forRoot({
       throttlers: [
-        {
-          ttl: 60,
-          limit: 20,
-        },
+        { ttl: 60, limit: 20 },
       ],
     }),
 
@@ -35,6 +51,7 @@ import { AppController } from './app.controller'
     BookingsModule,
     AdminModule,
     AiModule,
+    AtaModule,
   ],
   controllers: [AppController],
   providers: [

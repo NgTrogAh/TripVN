@@ -23,8 +23,12 @@ export class AiService {
 
       const res = await firstValueFrom(
           this.http.post('http://127.0.0.1:8000/voice', form, {
-            headers: form.getHeaders(),
-            timeout: 60_000,
+            headers: {
+              ...form.getHeaders(),
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            timeout: 120_000,
           }),
       )
 
