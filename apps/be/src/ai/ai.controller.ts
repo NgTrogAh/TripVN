@@ -9,25 +9,26 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
 import type { Express } from 'express'
-
+import { ChatResponseDto } from './dto/chat-response.dto'
 import { AiService } from './ai.service'
 import { VoiceResponseDto } from './dto/voice-response.dto'
+import { Public} from '../auth/public.decorator'
 
 @Controller('ai')
 export class AiController {
   constructor(private readonly ai: AiService) {}
-
+  @Public()
   @Post('chat')
   async chat(
       @Body() body: { message: string },
-  ): Promise<VoiceResponseDto> {
+  ): Promise<ChatResponseDto> {
     if (!body.message) {
       throw new BadRequestException('message is required')
     }
 
     return this.ai.chat(body.message)
   }
-
+  @Public()
   @Post('voice')
   @UseInterceptors(
       FileInterceptor('file', {

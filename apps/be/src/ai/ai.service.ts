@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios'
 import { firstValueFrom } from 'rxjs'
 import FormData from 'form-data'
 import { VoiceResponseDto } from './dto/voice-response.dto'
+import { ChatResponseDto} from "./dto/chat-response.dto"
 
 type UploadedAudio = {
     buffer: Buffer
@@ -14,7 +15,7 @@ type UploadedAudio = {
 export class AiService {
     constructor(private readonly http: HttpService) {}
 
-    async chat(message: string): Promise<VoiceResponseDto> {
+    async chat(message: string): Promise<ChatResponseDto> {
         try {
             const res = await firstValueFrom(
                 this.http.post('http://127.0.0.1:8000/chat', {
