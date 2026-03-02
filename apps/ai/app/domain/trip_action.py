@@ -6,6 +6,7 @@ class ActionType(str, Enum):
     MODIFY = "MODIFY"
     REMOVE = "REMOVE"
     REMIND = "REMIND"
+    QUERY = "QUERY"
     SUGGEST = "SUGGEST"
 
 
@@ -16,7 +17,13 @@ class TripAction:
 
     @classmethod
     def from_llm(cls, data: Dict[str, Any]) -> "TripAction":
-        action_type = ActionType(data.get("type", "SUGGEST"))
+        action_type_value = data.get("type", "SUGGEST")
+
+        try:
+            action_type = ActionType(action_type_value)
+        except ValueError:
+            action_type = ActionType.SUGGEST
+
         payload = data.get("payload", {})
         return cls(action_type=action_type, payload=payload)
 

@@ -1,48 +1,105 @@
 import httpx
 import json
+from typing import Dict, Any
 from apps.ai.app.config import OLLAMA_MODEL, OLLAMA_URL
+
+
+ALLOWED_INTENTS = {
+    "add_timeline_item",
+    "modify_timeline_item",
+    "remove_timeline_item",
+    "set_reminder",
+    "query_trip_info",
+    "query_timeline",
+    "query_booking",
+    "query_reminder",
+    "general_chat",
+    "unknown",
+}
+
 
 SYSTEM_PROMPT = """
 You are TripVN AI, an analysis engine for a hybrid travel experience platform.
 
-Your role is NOT to make decisions.
-Your role is to analyze the user's input and extract structured information
-that the backend system will validate and process.
+Your job:
+Analyze user input and extract structured data for backend processing.
 
-You must:
-- Detect the user's language: Vietnamese ("vi") or English ("en")
-- Identify ONE primary intent
-- Extract entities ONLY if clearly mentioned
+STRICT RULES:
 
-Allowed intents:
-- add_timeline_item
-- set_reminder
-- query_trip_info
-- general_chat
-- unknown
+1. Detect language:
+   - "vi" for Vietnamese
+   - "en" for English
+   - Default to "vi" if unclear
 
-Rules:
-- Intent MUST be one of the allowed intents above
-- Intent must be lowercase snake_case
-- Choose ONE intent only
-- Do NOT invent entities
-- Do NOT assume missing information
-- Entities must be an object (can be empty)
+2. Select EXACTLY ONE intent from:
+   - add_timeline_item
+   - modify_timeline_item
+   - remove_timeline_item
+   - set_reminder
+   - query_trip_info
+   - query_timeline
+   - query_booking
+   - query_reminder
+   - general_chat
+   - unknown
 
-You MUST reply with ONLY valid JSON.
-No explanation.
-No markdown.
-No text outside JSON.
+3. If the request does not clearly match an intent, use "unknown".
 
-JSON schema:
+4. Extract entities ONLY if explicitly mentioned.
+   - Do NOT infer missing data.
+   - Do NOT guess.
+   - If none, return empty object {}.
+
+5. Entities MUST always be an object.
+
+6. Output MUST be valid JSON only.
+   - No explanation
+   - No markdown
+   - No extra text
+
+Output format:
+
 {
   "language": "vi | en",
-  "intent": "string",
-  "entities": { "key": "value" }
+  "intent": "allowed_intent_only",
+  "entities": {}
 }
 """
 
-async def analyze_text(text: str) -> dict:
+
+def _safe_fallback() -> Dict[str, Any]:
+    return {
+        "language": "vi",
+        "intent": "unknown",
+        "entities": {},
+    }
+
+
+def _normalize_output(data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        return _safe_fallback()
+
+    language = data.get("language", "vi")
+    intent = data.get("intent", "unknown")
+    entities = data.get("entities", {})
+
+    if language not in {"vi", "en"}:
+        language = "vi"
+
+    if intent not in ALLOWED_INTENTS:
+        intent = "unknown"
+
+    if not isinstance(entities, dict):
+        entities = {}
+
+    return {
+        "language": language,
+        "intent": intent,
+        "entities": entities,
+    }
+
+
+async def _call_llm(text: str) -> str:
     payload = {
         "model": OLLAMA_MODEL,
         "messages": [
@@ -61,12 +118,15 @@ async def analyze_text(text: str) -> dict:
             json=payload
         )
         response.raise_for_status()
+        return response.json()["message"]["content"]
 
-        raw_content = response.json()["message"]["content"]
+async def analyze_text(text: str) -> Dict[str, Any]:
+    for _ in range(2):
+        try:
+            raw = await _call_llm(text)
+            data = json.loads(raw)
+            return _normalize_output(data)
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError):
+            continue
 
-    try:
-        data = json.loads(raw_content)
-    except json.JSONDecodeError:
-        raise ValueError("LLM returned invalid JSON")
-
-    return data
+    return _safe_fallback()

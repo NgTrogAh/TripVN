@@ -25,13 +25,17 @@ class ChatUsecase:
         )
 
     def _map_intent_to_action(self, intent: Intent) -> ActionType:
-        if intent == Intent.ADD_TIMELINE_ITEM:
-            return ActionType.ADD
-        if intent == Intent.SET_REMINDER:
-            return ActionType.REMIND
-        if intent == Intent.MODIFY_TIMELINE_ITEM:
-            return ActionType.MODIFY
-        if intent == Intent.REMOVE_TIMELINE_ITEM:
-            return ActionType.REMOVE
+        mapping = {
+            Intent.ADD_TIMELINE_ITEM: ActionType.ADD,
+            Intent.MODIFY_TIMELINE_ITEM: ActionType.MODIFY,
+            Intent.REMOVE_TIMELINE_ITEM: ActionType.REMOVE,
+            Intent.SET_REMINDER: ActionType.REMIND,
+        }
+
+        if intent in mapping:
+            return mapping[intent]
+
+        if intent.is_query():
+            return ActionType.QUERY
 
         return ActionType.SUGGEST

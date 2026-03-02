@@ -63,10 +63,11 @@ export class AtaService {
         return this.prisma.ai_trip_actions.create({
             data: {
                 trip_id: tripId,
+                triggered_by_user_id: userId,
                 action_type: dto.action_type,
                 payload,
-                status: ai_action_status_enum.PENDING,
-            },
+                status: 'PENDING'
+            }
         })
     }
 

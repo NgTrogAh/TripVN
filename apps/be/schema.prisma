@@ -8,23 +8,24 @@ datasource db {
 }
 
 model users {
-  id               String             @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
-  email            String             @unique @db.VarChar
-  name             String             @default("")
-  email_verified   Boolean            @default(false)
-  status           user_status_enum   @default(ACTIVE)
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime           @updatedAt @db.Timestamptz(6)
-  ai_conversations ai_conversations[]
-  bookings         bookings[]
-  friend_requests  friend_requests[]
-  friends_to       friends[]          @relation("friends_to")
-  friends_from     friends[]          @relation("friends_from")
-  payments         payments[]
-  trip_shares      trip_shares[]
-  trips            trips[]
-  user_profiles    user_profiles?
-  user_sessions    user_sessions[]
+  id                   String             @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  email                String             @unique @db.VarChar
+  name                 String             @default("")
+  email_verified       Boolean            @default(false)
+  status               user_status_enum   @default(ACTIVE)
+  created_at           DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime           @updatedAt @db.Timestamptz(6)
+  ai_conversations     ai_conversations[]
+  ai_triggered_actions ai_trip_actions[]
+  bookings             bookings[]
+  friend_requests      friend_requests[]
+  friends_to           friends[]          @relation("friends_to")
+  friends_from         friends[]          @relation("friends_from")
+  payments             payments[]
+  trip_shares          trip_shares[]
+  trips                trips[]
+  user_profiles        user_profiles?
+  user_sessions        user_sessions[]
 }
 
 model user_profiles {
@@ -169,18 +170,22 @@ model ai_conversations {
 }
 
 model ai_trip_actions {
-  id                  String                @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
-  trip_id             String                @db.Uuid
-  timeline_item_id    String?               @db.Uuid
-  action_type         ai_action_type_enum
-  payload             Json?
-  status              ai_action_status_enum @default(PENDING)
-  created_at          DateTime              @default(now()) @db.Timestamptz(6)
-  trip_timeline_items trip_timeline_items?  @relation(fields: [timeline_item_id], references: [id])
-  trips               trips                 @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+  id                   String                @id @default(dbgenerated("gen_uuidv7()")) @db.Uuid
+  trip_id              String                @db.Uuid
+  triggered_by_user_id String                @db.Uuid
+  timeline_item_id     String?               @db.Uuid
+  action_type          ai_action_type_enum
+  payload              Json?
+  status               ai_action_status_enum @default(PENDING)
+  created_at           DateTime              @default(now()) @db.Timestamptz(6)
+
+  trip_timeline_items trip_timeline_items? @relation(fields: [timeline_item_id], references: [id])
+  trips               trips                @relation(fields: [trip_id], references: [id], onDelete: Cascade)
+  users               users                @relation(fields: [triggered_by_user_id], references: [id])
 
   @@index([trip_id])
   @@index([status])
+  @@index([triggered_by_user_id])
 }
 
 model friend_requests {
@@ -295,6 +300,7 @@ enum ai_action_type_enum {
   MODIFY
   REMOVE
   REMIND
+  QUERY
   SUGGEST
 }
 
